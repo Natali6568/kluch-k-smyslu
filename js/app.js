@@ -32,4 +32,89 @@ function checkMasterReady(){const thoughts=state.text.paragraphs.map((_,i)=>docu
 function finishMaster(thoughts,userText){const p=getProgress();p[`master:${state.text.id}`]=true;saveProgress(p);app.innerHTML=`<section class="panel result"><div class="keybig">🗝️</div><h1>Смысл открыт!</h1><p>Ты самостоятельно выделил главные мысли и создал сжатый текст.</p></section><section class="panel"><h2>Твой вариант</h2><div class="expert">${esc(userText)}</div></section><section class="panel"><h2>Экспертный вариант</h2><div class="expert">${esc(state.text.expert)}</div><p class="small">Формулировки могут отличаться. Проверь, сохранены ли те же основные мысли и связи.</p></section><section class="panel"><h2>Главные мысли, которые ты записал</h2><div class="tracker-summary">${thoughts.map((x,i)=>`<article><b>Микротема ${i+1}.</b> ${esc(x)}</article>`).join('')}</div></section><div class="controls"><button class="secondary" onclick="openMaster('${state.text.id}')">Пройти ещё раз</button><button class="primary" onclick="openRoute('master')">Выбрать следующий текст</button></div>`;scrollTo(0,0)}
 
 function finishText(){const p=getProgress();p[`${state.mode}:${state.text.id}`]=true;saveProgress(p);const route=state.mode;const replay=route==='discoveries'?`openDiscovery('${state.text.id}')`:route==='researcher'?`openResearch('${state.text.id}')`:`openTracker('${state.text.id}')`;const message=route==='tracker'?'Ты определил главные мысли всех микротем и выбрал точные сжатые варианты.':'Ты нашёл и правильно преобразовал все учебные места.';app.innerHTML=`<section class="panel result"><div class="keybig">🗝️</div><h1>Смысл открыт!</h1><p>${message}</p></section><section class="panel"><h2>Экспертный вариант</h2><div class="expert">${esc(state.text.expert)}</div><p class="small">Это один из возможных вариантов. Главное — сохранить основные мысли и связь между ними.</p></section><div class="controls"><button class="secondary" onclick="${replay}">Пройти ещё раз</button><button class="primary" onclick="openRoute('${route}')">Выбрать следующий текст</button></div>`;scrollTo(0,0)}
-const homeBtn=document.getElementById('homeBtn');const helpBtn=document.getElementById('helpBtn');const closeHelpBtn=document.getElementById('closeHelp');const helpDialog=document.getElementById('help');const themeBtn=document.getElementById('themeBtn');homeBtn.onclick=home;helpBtn.onclick=()=>helpDialog.showModal();closeHelpBtn.onclick=()=>helpDialog.close();themeBtn.onclick=()=>{document.body.classList.toggle('dark');localStorage.setItem('kms-theme',document.body.classList.contains('dark')?'dark':'light');themeBtn.textContent=document.body.classList.contains('dark')?'☀️':'🌙'};if(localStorage.getItem('kms-theme')==='dark')document.body.classList.add('dark');themeBtn.textContent=document.body.classList.contains('dark')?'☀️':'🌙';home();
+const homeBtn=document.getElementById('homeBtn');
+const helpBtn=document.getElementById('helpBtn');
+const closeHelpBtn=document.getElementById('closeHelp');
+const helpDialog=document.getElementById('help');
+const themeBtn=document.getElementById('themeBtn');
+const logoutBtn=document.getElementById('logoutBtn');
+let supabaseClient=null;
+let authMode='login';
+let currentView='platform';
+
+homeBtn.onclick=()=>{if(!supabaseClient)return; if(currentView==='trainer')renderPlatform(); else renderPlatform();};
+helpBtn.onclick=()=>helpDialog.showModal();
+closeHelpBtn.onclick=()=>helpDialog.close();
+themeBtn.onclick=()=>{document.body.classList.toggle('dark');localStorage.setItem('kms-theme',document.body.classList.contains('dark')?'dark':'light');themeBtn.textContent=document.body.classList.contains('dark')?'☀️':'🌙'};
+if(localStorage.getItem('kms-theme')==='dark')document.body.classList.add('dark');
+themeBtn.textContent=document.body.classList.contains('dark')?'☀️':'🌙';
+
+function renderAuth(mode='login',message='',kind=''){
+ authMode=mode;
+ logoutBtn.hidden=true;
+ app.innerHTML=`<section class="auth-shell"><div class="auth-card"><div class="auth-logo">🗝️</div><h1>Ключ к смыслу</h1><p class="auth-lead">Войдите в аккаунт, чтобы открыть интерактивный тренажёр.</p><div class="auth-tabs"><button class="auth-tab ${mode==='login'?'active':''}" onclick="renderAuth('login')">Войти</button><button class="auth-tab ${mode==='signup'?'active':''}" onclick="renderAuth('signup')">Регистрация</button></div><form class="auth-form" id="authForm"><label class="auth-label">Электронная почта<input class="auth-input" id="authEmail" type="email" autocomplete="email" placeholder="name@example.ru" required></label><label class="auth-label">Пароль<input class="auth-input" id="authPassword" type="password" autocomplete="${mode==='login'?'current-password':'new-password'}" minlength="6" placeholder="Не менее 6 символов" required></label>${message?`<div class="auth-message ${kind}">${esc(message)}</div>`:''}<button class="auth-submit" id="authSubmit" type="submit">${mode==='login'?'Войти':'Создать аккаунт'}</button>${mode==='signup'?'<p class="auth-note">После регистрации на почту может прийти письмо. Откройте его и подтвердите адрес, затем вернитесь на эту страницу и войдите.</p>':''}</form></div></section>`;
+ document.getElementById('authForm').addEventListener('submit',handleAuthSubmit);
+ scrollTo(0,0);
+}
+
+async function handleAuthSubmit(event){
+ event.preventDefault();
+ const email=document.getElementById('authEmail').value.trim();
+ const password=document.getElementById('authPassword').value;
+ const btn=document.getElementById('authSubmit');
+ btn.disabled=true;btn.textContent='Проверяем…';
+ try{
+  if(authMode==='signup'){
+   const {data,error}=await supabaseClient.auth.signUp({email,password,options:{emailRedirectTo:location.origin}});
+   if(error)throw error;
+   if(data.session){showTrainer()}else renderAuth('login','Аккаунт создан. Проверьте почту и подтвердите адрес, затем войдите.','success');
+  }else{
+   const {error}=await supabaseClient.auth.signInWithPassword({email,password});
+   if(error)throw error;
+  }
+ }catch(error){
+  const msg=translateAuthError(error.message||'Не удалось выполнить вход.');
+  renderAuth(authMode,msg,'error');
+ }
+}
+
+function translateAuthError(message){
+ const m=message.toLowerCase();
+ if(m.includes('invalid login credentials'))return 'Неверная электронная почта или пароль.';
+ if(m.includes('email not confirmed'))return 'Сначала подтвердите адрес по ссылке из письма.';
+ if(m.includes('user already registered'))return 'Этот адрес уже зарегистрирован. Перейдите во вкладку «Войти».';
+ if(m.includes('password should be'))return 'Пароль должен содержать не менее 6 символов.';
+ if(m.includes('rate limit'))return 'Слишком много попыток. Попробуйте немного позже.';
+ return message;
+}
+
+function renderPlatform(){
+ currentView='platform';
+ logoutBtn.hidden=false;
+ app.innerHTML=`<section class="platform-hero"><div class="platform-mark">📚</div><div><h1>Образовательная платформа</h1><p class="platform-title">«Не по учебнику. Замечать. Понимать. Открывать.»</p><p class="platform-author">Автор проекта — Наталья Владимировна Турченкова</p></div></section><section class="product-grid single-product"><article class="product-card available"><div class="product-icon">📖</div><div class="product-content"><div class="small">Интерактивный тренажёр</div><h2>Ключ к смыслу</h2><p>Обучение смысловому сжатию текста: от подсказок к самостоятельному анализу.</p><button class="primary" onclick="openTrainer()">Открыть</button></div></article></section>`;
+ scrollTo(0,0);
+}
+function openTrainer(){currentView='trainer';home()}
+function showTrainer(){renderPlatform()}
+
+logoutBtn.onclick=async()=>{if(supabaseClient){await supabaseClient.auth.signOut();renderAuth('login','Вы вышли из аккаунта.','success')}};
+
+async function initAuth(){
+ app.innerHTML='<div class="auth-loading">Открываем тренажёр…</div>';
+ try{
+  const response=await fetch('/api/config',{cache:'no-store'});
+  if(!response.ok)throw new Error('Не настроено подключение к Supabase.');
+  const config=await response.json();
+  if(!config.supabaseUrl||!config.supabaseAnonKey)throw new Error('Не настроено подключение к Supabase.');
+  supabaseClient=window.supabase.createClient(config.supabaseUrl,config.supabaseAnonKey);
+  const {data:{session}}=await supabaseClient.auth.getSession();
+  if(session)renderPlatform();else renderAuth('login');
+  supabaseClient.auth.onAuthStateChange((event,session)=>{
+   if(event==='SIGNED_IN'&&session)renderPlatform();
+   if(event==='SIGNED_OUT')renderAuth('login');
+  });
+ }catch(error){
+  app.innerHTML=`<section class="auth-shell"><div class="auth-card"><div class="auth-logo">🗝️</div><h1>Нужна настройка</h1><p class="auth-lead">${esc(error.message)}</p><div class="auth-message error">Добавьте в Vercel переменные <b>SUPABASE_URL</b> и <b>SUPABASE_ANON_KEY</b>, затем повторите развёртывание проекта.</div></div></section>`;
+ }
+}
+initAuth();
