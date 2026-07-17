@@ -65,7 +65,7 @@ async function handleAuthSubmit(event){
  btn.disabled=true;btn.textContent='Проверяем…';
  try{
   if(authMode==='signup'){
-   const redirectOrigin=location.hostname==='nepouchebniku.ru'?'https://www.nepouchebniku.ru':location.origin;
+   const redirectOrigin=location.origin;
    const {data,error}=await supabaseClient.auth.signUp({email,password,options:{emailRedirectTo:redirectOrigin}});
    if(error)throw error;
    if(data.session){showTrainer()}else renderAuth('login','Аккаунт создан. Проверьте почту и подтвердите адрес, затем войдите.','success');
