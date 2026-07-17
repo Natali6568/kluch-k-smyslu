@@ -65,7 +65,8 @@ async function handleAuthSubmit(event){
  btn.disabled=true;btn.textContent='Проверяем…';
  try{
   if(authMode==='signup'){
-   const {data,error}=await supabaseClient.auth.signUp({email,password,options:{emailRedirectTo:location.origin}});
+   const redirectOrigin=location.hostname==='nepouchebniku.ru'?'https://www.nepouchebniku.ru':location.origin;
+   const {data,error}=await supabaseClient.auth.signUp({email,password,options:{emailRedirectTo:redirectOrigin}});
    if(error)throw error;
    if(data.session){showTrainer()}else renderAuth('login','Аккаунт создан. Проверьте почту и подтвердите адрес, затем войдите.','success');
   }else{
@@ -99,6 +100,39 @@ function showTrainer(){renderPlatform()}
 
 logoutBtn.onclick=async()=>{if(supabaseClient){await supabaseClient.auth.signOut();renderAuth('login','Вы вышли из аккаунта.','success')}};
 
+function readAuthCallback(){
+ const hashParams=new URLSearchParams(location.hash.replace(/^#/,''));
+ const queryParams=new URLSearchParams(location.search);
+ return {
+  accessToken:hashParams.get('access_token'),
+  refreshToken:hashParams.get('refresh_token'),
+  error:hashParams.get('error_description')||queryParams.get('error_description')||hashParams.get('error')||queryParams.get('error')
+ };
+}
+
+function clearAuthCallbackFromAddress(){
+ if(location.hash||location.search){
+  history.replaceState({},document.title,location.pathname);
+ }
+}
+
+async function completeEmailConfirmation(){
+ const callback=readAuthCallback();
+ if(callback.error){
+  clearAuthCallbackFromAddress();
+  throw new Error(decodeURIComponent(callback.error.replace(/\+/g,' ')));
+ }
+ if(!callback.accessToken||!callback.refreshToken)return null;
+ app.innerHTML='<div class="auth-loading">Подтверждаем электронную почту…</div>';
+ const {data,error}=await supabaseClient.auth.setSession({
+  access_token:callback.accessToken,
+  refresh_token:callback.refreshToken
+ });
+ if(error)throw error;
+ clearAuthCallbackFromAddress();
+ return data.session||null;
+}
+
 async function initAuth(){
  app.innerHTML='<div class="auth-loading">Открываем тренажёр…</div>';
  try{
@@ -106,15 +140,27 @@ async function initAuth(){
   if(!response.ok)throw new Error('Не настроено подключение к Supabase.');
   const config=await response.json();
   if(!config.supabaseUrl||!config.supabaseAnonKey)throw new Error('Не настроено подключение к Supabase.');
-  supabaseClient=window.supabase.createClient(config.supabaseUrl,config.supabaseAnonKey);
-  const {data:{session}}=await supabaseClient.auth.getSession();
-  if(session)renderPlatform();else renderAuth('login');
+  supabaseClient=window.supabase.createClient(config.supabaseUrl,config.supabaseAnonKey,{
+   auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,flowType:'implicit'}
+  });
+
   supabaseClient.auth.onAuthStateChange((event,session)=>{
-   if(event==='SIGNED_IN'&&session)renderPlatform();
+   if((event==='SIGNED_IN'||event==='TOKEN_REFRESHED')&&session)renderPlatform();
    if(event==='SIGNED_OUT')renderAuth('login');
   });
+
+  const callbackSession=await completeEmailConfirmation();
+  if(callbackSession){
+   renderPlatform();
+   return;
+  }
+
+  const {data:{session},error}=await supabaseClient.auth.getSession();
+  if(error)throw error;
+  if(session)renderPlatform();else renderAuth('login');
  }catch(error){
-  app.innerHTML=`<section class="auth-shell"><div class="auth-card"><div class="auth-logo">🗝️</div><h1>Нужна настройка</h1><p class="auth-lead">${esc(error.message)}</p><div class="auth-message error">Добавьте в Vercel переменные <b>SUPABASE_URL</b> и <b>SUPABASE_ANON_KEY</b>, затем повторите развёртывание проекта.</div></div></section>`;
+  const message=translateAuthError(error.message||'Не удалось завершить вход.');
+  renderAuth('login',message,'error');
  }
 }
 initAuth();
