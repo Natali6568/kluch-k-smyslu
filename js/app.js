@@ -38,18 +38,94 @@ const closeHelpBtn=document.getElementById('closeHelp');
 const helpDialog=document.getElementById('help');
 const themeBtn=document.getElementById('themeBtn');
 const logoutBtn=document.getElementById('logoutBtn');
+const installBtn=document.getElementById('installBtn');
+const connectionBadge=document.getElementById('connectionBadge');
+
+const OFFLINE_ACCESS_KEY='kms-offline-access-v1';
+const FALLBACK_SUPABASE_CONFIG={
+ supabaseUrl:'https://nfnnulrdrnvqkmwubfku.supabase.co',
+ supabaseAnonKey:'sb_publishable_lvHE0iDbrntwsqqH8tpi5w_D_txjTEr'
+};
+
 let supabaseClient=null;
 let authMode='login';
-let currentView='platform';
+let currentView='loading';
+let isOfflineSession=false;
+let manualSignOut=false;
+let deferredInstallPrompt=null;
 
-homeBtn.onclick=()=>{if(!supabaseClient)return; if(currentView==='trainer')renderPlatform(); else renderPlatform();};
+function getOfflineAccess(){
+ try{
+  const saved=JSON.parse(localStorage.getItem(OFFLINE_ACCESS_KEY)||'null');
+  return saved&&saved.allowed===true?saved:null;
+ }catch(error){
+  localStorage.removeItem(OFFLINE_ACCESS_KEY);
+  return null;
+ }
+}
+
+function rememberOfflineAccess(session){
+ const previous=getOfflineAccess()||{};
+ const email=session&&session.user&&session.user.email?session.user.email:previous.email||'';
+ localStorage.setItem(OFFLINE_ACCESS_KEY,JSON.stringify({
+  allowed:true,
+  email,
+  verifiedAt:Date.now()
+ }));
+}
+
+function clearOfflineAccess(){
+ localStorage.removeItem(OFFLINE_ACCESS_KEY);
+}
+
+function clearSupabaseStoredSessions(){
+ const keys=[];
+ for(let i=0;i<localStorage.length;i++){
+  const key=localStorage.key(i);
+  if(key&&key.startsWith('sb-')&&key.endsWith('-auth-token'))keys.push(key);
+ }
+ keys.forEach(key=>localStorage.removeItem(key));
+}
+
+function updateConnectionUI(){
+ const offline=!navigator.onLine;
+ connectionBadge.hidden=!offline;
+ connectionBadge.textContent=offline?'Без интернета':'';
+ document.body.classList.toggle('is-offline',offline);
+}
+
+function offlineNotice(){
+ if(navigator.onLine&&!isOfflineSession)return '';
+ return '<div class="offline-notice"><b>Режим без интернета.</b> Все задания доступны, а результаты сохраняются на этом устройстве.</div>';
+}
+
+homeBtn.onclick=()=>{
+ if(currentView==='trainer'||currentView==='platform')renderPlatform();
+};
 helpBtn.onclick=()=>helpDialog.showModal();
 closeHelpBtn.onclick=()=>helpDialog.close();
-themeBtn.onclick=()=>{document.body.classList.toggle('dark');localStorage.setItem('kms-theme',document.body.classList.contains('dark')?'dark':'light');themeBtn.textContent=document.body.classList.contains('dark')?'☀️':'🌙'};
+themeBtn.onclick=()=>{
+ document.body.classList.toggle('dark');
+ localStorage.setItem('kms-theme',document.body.classList.contains('dark')?'dark':'light');
+ themeBtn.textContent=document.body.classList.contains('dark')?'☀️':'🌙';
+};
 if(localStorage.getItem('kms-theme')==='dark')document.body.classList.add('dark');
 themeBtn.textContent=document.body.classList.contains('dark')?'☀️':'🌙';
+updateConnectionUI();
+
+function renderOfflineLocked(message=''){
+ currentView='offline-locked';
+ logoutBtn.hidden=true;
+ app.innerHTML=`<section class="auth-shell"><div class="auth-card offline-card"><div class="auth-logo">📴</div><h1>Нет подключения к интернету</h1><p class="auth-lead">${message||'Для регистрации и первого входа нужен интернет. После первого успешного входа тренажёр будет открываться без сети на этом устройстве.'}</p><button class="auth-submit" type="button" onclick="initAuth()">Проверить подключение</button></div></section>`;
+ scrollTo(0,0);
+}
 
 function renderAuth(mode='login',message='',kind=''){
+ if(!navigator.onLine){
+  renderOfflineLocked(message);
+  return;
+ }
+ currentView='auth';
  authMode=mode;
  logoutBtn.hidden=true;
  app.innerHTML=`<section class="auth-shell"><div class="auth-card"><div class="auth-logo">🗝️</div><h1>Ключ к смыслу</h1><p class="auth-lead">Войдите в аккаунт, чтобы открыть интерактивный тренажёр.</p><div class="auth-tabs"><button class="auth-tab ${mode==='login'?'active':''}" onclick="renderAuth('login')">Войти</button><button class="auth-tab ${mode==='signup'?'active':''}" onclick="renderAuth('signup')">Регистрация</button></div><form class="auth-form" id="authForm"><label class="auth-label">Электронная почта<input class="auth-input" id="authEmail" type="email" autocomplete="email" placeholder="name@example.ru" required></label><label class="auth-label">Пароль<input class="auth-input" id="authPassword" type="password" autocomplete="${mode==='login'?'current-password':'new-password'}" minlength="6" placeholder="Не менее 6 символов" required></label>${message?`<div class="auth-message ${kind}">${esc(message)}</div>`:''}<button class="auth-submit" id="authSubmit" type="submit">${mode==='login'?'Войти':'Создать аккаунт'}</button>${mode==='signup'?'<p class="auth-note">После регистрации на почту может прийти письмо. Откройте его и подтвердите адрес, затем вернитесь на эту страницу и войдите.</p>':''}</form></div></section>`;
@@ -59,19 +135,33 @@ function renderAuth(mode='login',message='',kind=''){
 
 async function handleAuthSubmit(event){
  event.preventDefault();
+ if(!navigator.onLine||!supabaseClient){
+  renderAuth(authMode,'Для регистрации и входа необходимо подключение к интернету.','error');
+  return;
+ }
  const email=document.getElementById('authEmail').value.trim();
  const password=document.getElementById('authPassword').value;
  const btn=document.getElementById('authSubmit');
- btn.disabled=true;btn.textContent='Проверяем…';
+ btn.disabled=true;
+ btn.textContent='Проверяем…';
  try{
   if(authMode==='signup'){
    const redirectOrigin=location.origin;
    const {data,error}=await supabaseClient.auth.signUp({email,password,options:{emailRedirectTo:redirectOrigin}});
    if(error)throw error;
-   if(data.session){showTrainer()}else renderAuth('login','Аккаунт создан. Проверьте почту и подтвердите адрес, затем войдите.','success');
+   if(data.session){
+    rememberOfflineAccess(data.session);
+    showTrainer();
+   }else{
+    renderAuth('login','Аккаунт создан. Проверьте почту и подтвердите адрес, затем войдите.','success');
+   }
   }else{
-   const {error}=await supabaseClient.auth.signInWithPassword({email,password});
+   const {data,error}=await supabaseClient.auth.signInWithPassword({email,password});
    if(error)throw error;
+   if(data&&data.session){
+    rememberOfflineAccess(data.session);
+    showTrainer();
+   }
   }
  }catch(error){
   const msg=translateAuthError(error.message||'Не удалось выполнить вход.');
@@ -80,25 +170,47 @@ async function handleAuthSubmit(event){
 }
 
 function translateAuthError(message){
- const m=message.toLowerCase();
+ const m=String(message).toLowerCase();
  if(m.includes('invalid login credentials'))return 'Неверная электронная почта или пароль.';
  if(m.includes('email not confirmed'))return 'Сначала подтвердите адрес по ссылке из письма.';
  if(m.includes('user already registered'))return 'Этот адрес уже зарегистрирован. Перейдите во вкладку «Войти».';
  if(m.includes('password should be'))return 'Пароль должен содержать не менее 6 символов.';
  if(m.includes('rate limit'))return 'Слишком много попыток. Попробуйте немного позже.';
+ if(m.includes('failed to fetch')||m.includes('network'))return 'Не удалось подключиться к серверу. Проверьте интернет и повторите попытку.';
  return message;
 }
 
 function renderPlatform(){
  currentView='platform';
  logoutBtn.hidden=false;
- app.innerHTML=`<section class="platform-hero"><div class="platform-mark">📚</div><div><h1>Образовательная платформа</h1><p class="platform-title">«Не по учебнику. Замечать. Понимать. Открывать.»</p><p class="platform-author">Автор проекта — Наталья Владимировна Турченкова</p></div></section><section class="product-grid single-product"><article class="product-card available"><div class="product-icon">📖</div><div class="product-content"><div class="small">Интерактивный тренажёр</div><h2>Ключ к смыслу</h2><p>Обучение смысловому сжатию текста: от подсказок к самостоятельному анализу.</p><button class="primary" onclick="openTrainer()">Открыть</button></div></article></section>`;
+ app.innerHTML=`${offlineNotice()}<section class="platform-hero"><div class="platform-mark">📚</div><div><h1>Образовательная платформа</h1><p class="platform-title">«Не по учебнику. Замечать. Понимать. Открывать.»</p><p class="platform-author">Автор проекта — Наталья Владимировна Турченкова</p></div></section><section class="product-grid single-product"><article class="product-card available"><div class="product-icon">📖</div><div class="product-content"><div class="small">Интерактивный тренажёр</div><h2>Ключ к смыслу</h2><p>Обучение смысловому сжатию текста: от подсказок к самостоятельному анализу.</p><button class="primary" onclick="openTrainer()">Открыть</button></div></article></section>`;
  scrollTo(0,0);
 }
-function openTrainer(){currentView='trainer';home()}
-function showTrainer(){renderPlatform()}
 
-logoutBtn.onclick=async()=>{if(supabaseClient){await supabaseClient.auth.signOut();renderAuth('login','Вы вышли из аккаунта.','success')}};
+function openTrainer(){
+ currentView='trainer';
+ home();
+}
+
+function showTrainer(){
+ isOfflineSession=!navigator.onLine;
+ renderPlatform();
+}
+
+logoutBtn.onclick=async()=>{
+ manualSignOut=true;
+ clearOfflineAccess();
+ clearSupabaseStoredSessions();
+ try{
+  if(supabaseClient&&navigator.onLine)await supabaseClient.auth.signOut({scope:'local'});
+ }catch(error){
+  // Локальные данные входа уже удалены; отсутствие сети не мешает выйти на этом устройстве.
+ }
+ supabaseClient=null;
+ isOfflineSession=false;
+ manualSignOut=false;
+ renderAuth('login','Вы вышли из аккаунта.','success');
+};
 
 function readAuthCallback(){
  const hashParams=new URLSearchParams(location.hash.replace(/^#/,''));
@@ -133,34 +245,131 @@ async function completeEmailConfirmation(){
  return data.session||null;
 }
 
-async function initAuth(){
- app.innerHTML='<div class="auth-loading">Открываем тренажёр…</div>';
+async function loadSupabaseConfig(){
+ let config={...FALLBACK_SUPABASE_CONFIG};
  try{
   const response=await fetch('/api/config',{cache:'no-store'});
-  if(!response.ok)throw new Error('Не настроено подключение к Supabase.');
-  const config=await response.json();
+  if(response.ok){
+   const remote=await response.json();
+   if(remote.supabaseUrl&&remote.supabaseAnonKey)config=remote;
+  }
+ }catch(error){
+  // Для офлайн-режима используется публичная резервная конфигурация проекта.
+ }
+ return config;
+}
+
+async function initAuth(){
+ currentView='loading';
+ app.innerHTML='<div class="auth-loading">Открываем тренажёр…</div>';
+ updateConnectionUI();
+
+ if(!navigator.onLine){
+  if(getOfflineAccess()){
+   isOfflineSession=true;
+   renderPlatform();
+  }else{
+   renderOfflineLocked();
+  }
+  return;
+ }
+
+ try{
+  if(!window.supabase||typeof window.supabase.createClient!=='function'){
+   throw new Error('Не удалось загрузить модуль регистрации.');
+  }
+
+  const config=await loadSupabaseConfig();
   if(!config.supabaseUrl||!config.supabaseAnonKey)throw new Error('Не настроено подключение к Supabase.');
+
   supabaseClient=window.supabase.createClient(config.supabaseUrl,config.supabaseAnonKey,{
    auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,flowType:'implicit'}
   });
 
   supabaseClient.auth.onAuthStateChange((event,session)=>{
-   if((event==='SIGNED_IN'||event==='TOKEN_REFRESHED')&&session)renderPlatform();
-   if(event==='SIGNED_OUT')renderAuth('login');
+   if(session&&(event==='INITIAL_SESSION'||event==='SIGNED_IN'||event==='TOKEN_REFRESHED')){
+    rememberOfflineAccess(session);
+    isOfflineSession=false;
+    if(currentView==='loading'||currentView==='auth'||currentView==='offline-locked')renderPlatform();
+   }
+   if(event==='SIGNED_OUT'){
+    if(!navigator.onLine&&getOfflineAccess()){
+     isOfflineSession=true;
+     if(currentView!=='trainer')renderPlatform();
+     return;
+    }
+    if(manualSignOut||!getOfflineAccess())renderAuth('login');
+   }
   });
 
   const callbackSession=await completeEmailConfirmation();
   if(callbackSession){
+   rememberOfflineAccess(callbackSession);
+   isOfflineSession=false;
    renderPlatform();
    return;
   }
 
   const {data:{session},error}=await supabaseClient.auth.getSession();
   if(error)throw error;
-  if(session)renderPlatform();else renderAuth('login');
+  if(session){
+   rememberOfflineAccess(session);
+   isOfflineSession=false;
+   renderPlatform();
+  }else{
+   clearOfflineAccess();
+   renderAuth('login');
+  }
  }catch(error){
+  if(getOfflineAccess()){
+   isOfflineSession=true;
+   renderPlatform();
+   return;
+  }
   const message=translateAuthError(error.message||'Не удалось завершить вход.');
   renderAuth('login',message,'error');
  }
 }
+
+window.addEventListener('offline',()=>{
+ isOfflineSession=Boolean(getOfflineAccess());
+ updateConnectionUI();
+});
+
+window.addEventListener('online',()=>{
+ updateConnectionUI();
+ if(currentView==='offline-locked')initAuth();
+});
+
+window.addEventListener('beforeinstallprompt',event=>{
+ event.preventDefault();
+ deferredInstallPrompt=event;
+ installBtn.hidden=false;
+});
+
+installBtn.onclick=async()=>{
+ if(!deferredInstallPrompt)return;
+ deferredInstallPrompt.prompt();
+ await deferredInstallPrompt.userChoice;
+ deferredInstallPrompt=null;
+ installBtn.hidden=true;
+};
+
+window.addEventListener('appinstalled',()=>{
+ deferredInstallPrompt=null;
+ installBtn.hidden=true;
+});
+
+if(window.matchMedia('(display-mode: standalone)').matches){
+ installBtn.hidden=true;
+}
+
+if('serviceWorker' in navigator){
+ window.addEventListener('load',()=>{
+  navigator.serviceWorker.register('/sw.js',{scope:'/'}).then(registration=>{
+   registration.update();
+  }).catch(()=>{});
+ });
+}
+
 initAuth();

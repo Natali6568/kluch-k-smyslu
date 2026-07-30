@@ -1,1 +1,31 @@
-{"name":"Ключ к смыслу","short_name":"Ключ к смыслу","start_url":"./","display":"standalone","background_color":"#fff8ef","theme_color":"#f4a64f","lang":"ru"}
+{
+  "id": "/",
+  "name": "Ключ к смыслу",
+  "short_name": "Ключ к смыслу",
+  "description": "Интерактивный тренажёр смыслового сжатия текста для детей 8–10 лет",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "background_color": "#fff8ef",
+  "theme_color": "#f4a64f",
+  "lang": "ru",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
