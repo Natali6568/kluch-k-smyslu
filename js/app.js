@@ -183,7 +183,8 @@ function translateAuthError(message){
 function renderPlatform(){
  currentView='platform';
  logoutBtn.hidden=false;
- app.innerHTML=`${offlineNotice()}<section class="platform-hero"><div class="platform-mark">📚</div><div><h1>Образовательная платформа</h1><p class="platform-title">«Не по учебнику. Замечать. Понимать. Открывать.»</p><p class="platform-author">Автор проекта — Наталья Владимировна Турченкова</p></div></section><section class="product-grid single-product"><article class="product-card available"><div class="product-icon">📖</div><div class="product-content"><div class="small">Интерактивный тренажёр</div><h2>Ключ к смыслу</h2><p>Обучение смысловому сжатию текста: от подсказок к самостоятельному анализу.</p><button class="primary" onclick="openTrainer()">Открыть</button></div></article></section>`;
+ app.innerHTML=`${offlineNotice()}<section class="platform-hero"><div class="platform-mark">📚</div><div><h1>Образовательная платформа</h1><p class="platform-title">«Не по учебнику. Замечать. Понимать. Открывать.»</p><p class="platform-author">Автор проекта — Наталья Владимировна Турченкова</p></div></section><section class="install-panel" id="installPanel"><div class="install-panel-icon">📲</div><div class="install-panel-content"><h2>Тренажёр можно установить на устройство</h2><p>Он будет открываться отдельным значком и после первого входа сможет работать без интернета.</p></div><button class="primary install-panel-btn" id="platformInstallBtn" type="button" onclick="requestAppInstall()">Установить приложение</button></section><section class="product-grid single-product"><article class="product-card available"><div class="product-icon">📖</div><div class="product-content"><div class="small">Интерактивный тренажёр</div><h2>Ключ к смыслу</h2><p>Обучение смысловому сжатию текста: от подсказок к самостоятельному анализу.</p><button class="primary" onclick="openTrainer()">Открыть</button></div></article></section>`;
+ syncInstallUI();
  scrollTo(0,0);
 }
 
@@ -341,28 +342,53 @@ window.addEventListener('online',()=>{
  if(currentView==='offline-locked')initAuth();
 });
 
+function isAppInstalled(){
+ return window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
+}
+
+function syncInstallUI(){
+ const installed=isAppInstalled();
+ const panel=document.getElementById('installPanel');
+ const platformButton=document.getElementById('platformInstallBtn');
+ if(panel)panel.hidden=installed;
+ if(platformButton)platformButton.hidden=installed;
+ installBtn.hidden=installed||currentView!=='trainer'||!deferredInstallPrompt;
+}
+
+async function requestAppInstall(){
+ if(isAppInstalled()){
+  syncInstallUI();
+  return;
+ }
+ if(deferredInstallPrompt){
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt=null;
+  syncInstallUI();
+  return;
+ }
+ const isiPhoneOrIPad=/iphone|ipad|ipod/i.test(navigator.userAgent);
+ if(isiPhoneOrIPad){
+  alert('Чтобы установить приложение, нажмите кнопку «Поделиться» в браузере Safari, затем выберите «На экран Домой».');
+ }else{
+  alert('Браузер пока не показал окно установки. Откройте меню браузера и выберите «Установить приложение» или обновите страницу и повторите попытку.');
+ }
+}
+
 window.addEventListener('beforeinstallprompt',event=>{
  event.preventDefault();
  deferredInstallPrompt=event;
- installBtn.hidden=false;
+ syncInstallUI();
 });
 
-installBtn.onclick=async()=>{
- if(!deferredInstallPrompt)return;
- deferredInstallPrompt.prompt();
- await deferredInstallPrompt.userChoice;
- deferredInstallPrompt=null;
- installBtn.hidden=true;
-};
+installBtn.onclick=requestAppInstall;
 
 window.addEventListener('appinstalled',()=>{
  deferredInstallPrompt=null;
- installBtn.hidden=true;
+ syncInstallUI();
 });
 
-if(window.matchMedia('(display-mode: standalone)').matches){
- installBtn.hidden=true;
-}
+window.matchMedia('(display-mode: standalone)').addEventListener?.('change',syncInstallUI);
 
 if('serviceWorker' in navigator){
  window.addEventListener('load',()=>{

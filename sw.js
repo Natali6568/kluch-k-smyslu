@@ -1,16 +1,16 @@
-const CACHE_NAME='kms-offline-1.2.0';
+const CACHE_NAME='kms-offline-1.2.1';
 const SUPABASE_CDN='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0/dist/umd/supabase.js';
 
 const LOCAL_ASSETS=[
   '/',
   '/index.html',
   '/manifest.json',
-  '/css/style.css?v=1.2.0',
-  '/data/texts.js?v=1.2.0',
-  '/data/researcher.js?v=1.2.0',
-  '/data/tracker.js?v=1.2.0',
-  '/data/master.js?v=1.2.0',
-  '/js/app.js?v=1.2.0',
+  '/css/style.css?v=1.2.1',
+  '/data/texts.js?v=1.2.1',
+  '/data/researcher.js?v=1.2.1',
+  '/data/tracker.js?v=1.2.1',
+  '/data/master.js?v=1.2.1',
+  '/js/app.js?v=1.2.1',
   '/icons/icon-192.png',
   '/icons/icon-512.png'
 ];
