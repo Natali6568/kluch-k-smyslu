@@ -4,19 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#f4a64f">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Ключ к смыслу">
   <title>Ключ к смыслу</title>
-  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="css/style.css?v=1.2.1">
+  <link rel="stylesheet" href="css/style.css?v=1.1.8">
   <link rel="manifest" href="manifest.json">
   <script>
     window.addEventListener("error", function () {
-      var target = document.getElementById("app");
-      if (target && !target.innerHTML.trim()) {
-        target.innerHTML = '<section style="max-width:760px;margin:40px auto;padding:24px;font-family:Arial,sans-serif"><h1>Не удалось загрузить тренажёр</h1><p>Обновите страницу сочетанием Ctrl+F5. Если сообщение останется, очистите данные сайта в браузере.</p></section>';
+      var app = document.getElementById("app");
+      if (app && !app.innerHTML.trim()) {
+        app.innerHTML = '<section style="max-width:760px;margin:40px auto;padding:24px;font-family:Arial,sans-serif"><h1>Не удалось загрузить тренажёр</h1><p>Обновите страницу сочетанием Ctrl+F5. Если сообщение останется, очистите данные сайта в браузере.</p></section>';
       }
     });
   </script>
@@ -25,8 +20,6 @@
   <header class="topbar">
     <button class="brand" id="homeBtn">🗝️ <span>Ключ к смыслу</span></button>
     <div class="top-actions">
-      <span id="connectionBadge" class="connection-badge" aria-live="polite" hidden>Без интернета</span>
-      <button id="installBtn" class="install-btn" hidden>Установить приложение</button>
       <button id="helpBtn">Как работать</button>
       <button id="logoutBtn" class="logout-btn" hidden>Выйти</button>
       <button id="themeBtn" aria-label="Сменить тему">🌙</button>
@@ -35,6 +28,12 @@
 
   <main id="app"></main>
 
+  <footer class="legal-footer" aria-label="Правовая информация">
+    <a href="https://disk.yandex.ru/i/u-xHfCY8ayEEOA" target="_blank" rel="noopener noreferrer">Политика в отношении обработки персональных данных</a>
+    <span aria-hidden="true">•</span>
+    <a href="https://disk.yandex.ru/i/1G_gMPejWT0cag" target="_blank" rel="noopener noreferrer">Согласие на обработку персональных данных</a>
+  </footer>
+
   <dialog id="help">
     <button class="close" id="closeHelp">×</button>
     <h2>Как работать</h2>
@@ -42,16 +41,14 @@
     <p><b>🧠 Понимаем.</b> Определяем, почему фрагмент можно изменить.</p>
     <p><b>🗝️ Открываем смысл.</b> Выбираем лучший вариант сжатия.</p>
     <p>В «Первых открытиях» места уже выделены. В «Исследователе» нужно самому находить фрагменты. В «Следопыте» нужно определить главную мысль каждой микротемы и выбрать её сжатый вариант. В «Мастере смысла» работа выполняется самостоятельно, а затем сравнивается с экспертным вариантом. Все ответы подготовлены заранее, поэтому тренажёр не угадывает смысл автоматически.</p>
-    <p><b>Работа без интернета.</b> Сначала войдите в тренажёр при подключении к интернету. После этого его можно установить на устройство и открывать без сети. Результаты сохраняются на этом устройстве.</p>
   </dialog>
 
-  <noscript><p class="noscript-message">Для работы тренажёра необходимо включить JavaScript.</p></noscript>
-
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0/dist/umd/supabase.js"></script>
-  <script src="data/texts.js?v=1.2.1"></script>
-  <script src="data/researcher.js?v=1.2.1"></script>
-  <script src="data/tracker.js?v=1.2.1"></script>
-  <script src="data/master.js?v=1.2.1"></script>
-  <script src="js/app.js?v=1.2.1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/privacy-consent.js?v=1.1.9"></script>
+  <script src="data/texts.js?v=1.1.8"></script>
+  <script src="data/researcher.js?v=1.1.8"></script>
+  <script src="data/tracker.js?v=1.1.8"></script>
+  <script src="data/master.js?v=1.1.8"></script>
+  <script src="js/app.js?v=1.1.8"></script>
 </body>
 </html>
