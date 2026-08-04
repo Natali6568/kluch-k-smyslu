@@ -41,6 +41,9 @@ const logoutBtn=document.getElementById('logoutBtn');
 const installBtn=document.getElementById('installBtn');
 const connectionBadge=document.getElementById('connectionBadge');
 
+const PRIVACY_POLICY_URL='https://disk.yandex.ru/i/u-xHfCY8ayEEOA';
+const PERSONAL_DATA_CONSENT_URL='https://disk.yandex.ru/i/1G_gMPejWT0cag';
+const PERSONAL_DATA_DOCUMENTS_VERSION='2026-08-04';
 const OFFLINE_ACCESS_KEY='kms-offline-access-v1';
 const FALLBACK_SUPABASE_CONFIG={
  supabaseUrl:'https://nfnnulrdrnvqkmwubfku.supabase.co',
@@ -128,7 +131,7 @@ function renderAuth(mode='login',message='',kind=''){
  currentView='auth';
  authMode=mode;
  logoutBtn.hidden=true;
- app.innerHTML=`<section class="auth-shell"><div class="auth-card"><div class="auth-logo">🗝️</div><h1>Ключ к смыслу</h1><p class="auth-lead">Войдите в аккаунт, чтобы открыть интерактивный тренажёр.</p><div class="auth-tabs"><button class="auth-tab ${mode==='login'?'active':''}" onclick="renderAuth('login')">Войти</button><button class="auth-tab ${mode==='signup'?'active':''}" onclick="renderAuth('signup')">Регистрация</button></div><form class="auth-form" id="authForm"><label class="auth-label">Электронная почта<input class="auth-input" id="authEmail" type="email" autocomplete="email" placeholder="name@example.ru" required></label><label class="auth-label">Пароль<input class="auth-input" id="authPassword" type="password" autocomplete="${mode==='login'?'current-password':'new-password'}" minlength="6" placeholder="Не менее 6 символов" required></label>${message?`<div class="auth-message ${kind}">${esc(message)}</div>`:''}<button class="auth-submit" id="authSubmit" type="submit">${mode==='login'?'Войти':'Создать аккаунт'}</button>${mode==='signup'?'<p class="auth-note">После регистрации на почту может прийти письмо. Откройте его и подтвердите адрес, затем вернитесь на эту страницу и войдите.</p>':''}</form></div></section>`;
+ app.innerHTML=`<section class="auth-shell"><div class="auth-card"><div class="auth-logo">🗝️</div><h1>Ключ к смыслу</h1><p class="auth-lead">Войдите в аккаунт, чтобы открыть интерактивный тренажёр.</p><div class="auth-tabs"><button class="auth-tab ${mode==='login'?'active':''}" onclick="renderAuth('login')">Войти</button><button class="auth-tab ${mode==='signup'?'active':''}" onclick="renderAuth('signup')">Регистрация</button></div><form class="auth-form" id="authForm"><label class="auth-label">Электронная почта<input class="auth-input" id="authEmail" type="email" autocomplete="email" placeholder="name@example.ru" required></label><label class="auth-label">Пароль<input class="auth-input" id="authPassword" type="password" autocomplete="${mode==='login'?'current-password':'new-password'}" minlength="6" placeholder="Не менее 6 символов" required></label>${mode==='signup'?`<label class="consent-row"><input id="privacyConsent" class="consent-checkbox" type="checkbox" required><span>Я даю <a href="${PERSONAL_DATA_CONSENT_URL}" target="_blank" rel="noopener noreferrer">согласие на обработку персональных данных</a> и подтверждаю, что ознакомился(ась) с <a href="${PRIVACY_POLICY_URL}" target="_blank" rel="noopener noreferrer">Политикой в отношении обработки персональных данных</a>.</span></label>`:''}${message?`<div class="auth-message ${kind}">${esc(message)}</div>`:''}<button class="auth-submit" id="authSubmit" type="submit">${mode==='login'?'Войти':'Создать аккаунт'}</button>${mode==='signup'?'<p class="auth-note">После регистрации на почту может прийти письмо. Откройте его и подтвердите адрес, затем вернитесь на эту страницу и войдите.</p>':''}</form></div></section>`;
  document.getElementById('authForm').addEventListener('submit',handleAuthSubmit);
  scrollTo(0,0);
 }
@@ -146,8 +149,27 @@ async function handleAuthSubmit(event){
  btn.textContent='Проверяем…';
  try{
   if(authMode==='signup'){
+   const consent=document.getElementById('privacyConsent');
+   if(!consent||!consent.checked){
+    renderAuth('signup','Для регистрации необходимо подтвердить согласие на обработку персональных данных.','error');
+    return;
+   }
    const redirectOrigin=location.origin;
-   const {data,error}=await supabaseClient.auth.signUp({email,password,options:{emailRedirectTo:redirectOrigin}});
+   const consentAt=new Date().toISOString();
+   const {data,error}=await supabaseClient.auth.signUp({
+    email,
+    password,
+    options:{
+     emailRedirectTo:redirectOrigin,
+     data:{
+      personal_data_consent:true,
+      personal_data_consent_at:consentAt,
+      personal_data_policy_url:PRIVACY_POLICY_URL,
+      personal_data_consent_url:PERSONAL_DATA_CONSENT_URL,
+      personal_data_documents_version:PERSONAL_DATA_DOCUMENTS_VERSION
+     }
+    }
+   });
    if(error)throw error;
    if(data.session){
     rememberOfflineAccess(data.session);
@@ -392,7 +414,7 @@ window.matchMedia('(display-mode: standalone)').addEventListener?.('change',sync
 
 if('serviceWorker' in navigator){
  window.addEventListener('load',()=>{
-  navigator.serviceWorker.register('/sw.js',{scope:'/'}).then(registration=>{
+  navigator.serviceWorker.register('/sw.js?v=1.2.2',{scope:'/'}).then(registration=>{
    registration.update();
   }).catch(()=>{});
  });
